@@ -1,0 +1,122 @@
+# SAHIIXX Provider-Neutral Model Routing Contract
+# Version: 1.0
+# Ownership: agentic-harness + agency-agents
+# Hard rule: No Azure deployment names or provider-specific IDs in application code.
+#            Resolve via this contract at runtime.
+
+version: "1.0"
+updated: "2026-09-29"
+
+# Task classes are the only units applications request.
+# The router selects concrete models based on policy + live signals.
+
+task_classes:
+  classify:
+    description: "Lead classification, intent detection, spam/filter decisions"
+    preferred: local_fast
+    fallback: [hosted_general]
+    constraints:
+      max_latency_ms: 800
+      structured_output: true
+      privacy: tenant_ok
+
+  extract:
+    description: "Structured field extraction from forms, transcripts, documents"
+    preferred: local_structured
+    fallback: [hosted_general]
+    constraints:
+      max_latency_ms: 1500
+      structured_output: true
+      privacy: tenant_ok
+
+  plan:
+    description: "Multi-step reasoning, matching strategy, qualification rationale"
+    preferred: hosted_reasoning
+    fallback: [local_reasoning, hosted_general]
+    constraints:
+      max_latency_ms: 8000
+      structured_output: false
+      privacy: tenant_ok
+
+  voice:
+    description: "Realtime voice turn-taking and low-latency responses"
+    preferred: realtime_low_latency
+    fallback: []
+    constraints:
+      max_latency_ms: 400
+      structured_output: false
+      privacy: tenant_ok
+
+  judge:
+    description: "Independent evaluation / self-verification of another agent run"
+    preferred: independent_evaluator
+    fallback: [hosted_reasoning]
+    constraints:
+      max_latency_ms: 5000
+      structured_output: true
+      privacy: tenant_ok
+      must_differ_from: plan   # never judge with the same model that planned
+
+  enrich:
+    description: "Research / enrichment that may leave the tenant boundary"
+    preferred: hosted_general
+    fallback: []
+    constraints:
+      max_latency_ms: 10000
+      privacy: external_ok
+
+# Capability slots (resolved by the router registry)
+capability_slots:
+  local_fast:
+    requirements: [low_cost, high_throughput, structured_output]
+    candidates_hint: ["ollama/qwen2.5-3b", "vllm/llama-3.2-3b", "local/phi-3-mini"]
+
+  local_structured:
+    requirements: [structured_output, local_only]
+    candidates_hint: ["ollama/qwen2.5-7b", "vllm/llama-3.1-8b"]
+
+  local_reasoning:
+    requirements: [local_only, long_context]
+    candidates_hint: ["ollama/qwen2.5-32b", "vllm/llama-3.1-70b"]
+
+  hosted_general:
+    requirements: [structured_output, moderate_cost]
+    candidates_hint: ["openai/gpt-4o-mini", "anthropic/claude-3-5-haiku", "azure/gpt-4o-mini"]
+
+  hosted_reasoning:
+    requirements: [strong_reasoning, long_context]
+    candidates_hint: ["openai/o3", "anthropic/claude-opus-4", "google/gemini-2.5-pro"]
+
+  realtime_low_latency:
+    requirements: [realtime_audio, low_latency]
+    candidates_hint: ["openai/gpt-4o-realtime", "livekit/cartesia", "deepgram+llm"]
+
+  independent_evaluator:
+    requirements: [strong_reasoning, different_family]
+    candidates_hint: ["anthropic/claude-opus-4", "openai/o3"]
+
+# Runtime selection signals (ordered by priority)
+selection_signals:
+  - privacy_tier          # tenant_ok | external_ok | local_only
+  - current_health        # circuit-breaker state of provider
+  - latency_budget_ms
+  - cost_budget_usd
+  - context_length_needed
+  - structured_output_required
+  - evaluation_score      # recent quality score for this slot
+  - canary_weight         # for gradual model rollouts
+
+# Policy knobs
+policy:
+  never_hardcode_deployment_names: true
+  require_cost_attribution: true
+  require_model_in_event: true
+  canary_default_percent: 5
+  circuit_breaker:
+    failure_threshold: 5
+    recovery_timeout_sec: 60
+  fallback_must_be_different_provider: true
+
+# Registry interface (implemented by agentic-harness)
+# resolve(task_class, context) -> ModelBinding
+# ModelBinding = { provider, model_id, endpoint, api_key_ref, cost_per_1k, max_tokens, ... }

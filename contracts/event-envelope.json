@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sahiixx.internal/contracts/event-envelope/v1",
+  "title": "SAHIIXX Canonical Event Envelope",
+  "description": "Single event contract for all revenue and agent workflows. Every lead, action, appointment, deal, and commission event MUST use this envelope.",
+  "type": "object",
+  "required": [
+    "event_id",
+    "event_type",
+    "event_version",
+    "occurred_at",
+    "tenant_id",
+    "correlation_id",
+    "causation_id",
+    "source",
+    "payload"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Globally unique, immutable identifier for this event instance (idempotency key base)."
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "lead.received",
+        "lead.normalized",
+        "lead.consent_verified",
+        "lead.qualified",
+        "lead.matched",
+        "lead.contacted",
+        "lead.replied",
+        "appointment.booked",
+        "appointment.showed",
+        "appointment.no_show",
+        "deal.created",
+        "deal.won",
+        "deal.lost",
+        "commission.recorded",
+        "revenue.attributed",
+        "agent.run.started",
+        "agent.run.completed",
+        "agent.run.failed",
+        "human.approval.requested",
+        "human.approval.granted",
+        "human.approval.denied",
+        "memory.written",
+        "memory.superseded",
+        "system.health",
+        "system.remediation"
+      ]
+    },
+    "event_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$",
+      "description": "Semantic version of this event_type schema (e.g. 1.0)."
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp when the business fact occurred (not when it was ingested)."
+    },
+    "ingested_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp when the bus accepted the event."
+    },
+    "tenant_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stable tenant / organization identifier. Required for isolation."
+    },
+    "correlation_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Groups all events belonging to one business journey (e.g. one lead lifecycle)."
+    },
+    "causation_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "The event_id that directly caused this event (or null for root events)."
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 8,
+      "description": "Client-supplied or derived key. Bus MUST reject duplicates within the retention window."
+    },
+    "source": {
+      "type": "object",
+      "required": ["channel", "system"],
+      "properties": {
+        "channel": {
+          "type": "string",
+          "enum": ["telegram", "web_form", "crm", "api", "voice", "whatsapp", "email", "internal"]
+        },
+        "system": {
+          "type": "string",
+          "description": "Producing system, e.g. firstcall-api, agency-agents, friday-os."
+        },
+        "actor_id": {
+          "type": "string",
+          "description": "Human or agent identity that triggered the event."
+        }
+      }
+    },
+    "agent": {
+      "type": "object",
+      "properties": {
+        "agent_run_id": { "type": "string", "format": "uuid" },
+        "agent_id": { "type": "string" },
+        "workflow_id": { "type": "string" },
+        "model": { "type": "string", "description": "provider/model identifier used" },
+        "cost_usd": { "type": "number", "minimum": 0 },
+        "human_approved": { "type": "boolean" },
+        "tokens_in": { "type": "integer", "minimum": 0 },
+        "tokens_out": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "entities": {
+      "type": "object",
+      "description": "Stable business identifiers for joins.",
+      "properties": {
+        "lead_id": { "type": "string" },
+        "appointment_id": { "type": "string" },
+        "deal_id": { "type": "string" },
+        "commission_id": { "type": "string" },
+        "contact_id": { "type": "string" }
+      }
+    },
+    "payload": {
+      "type": "object",
+      "description": "Event-type-specific body. Must validate against the schema registered for event_type@event_version."
+    },
+    "trace": {
+      "type": "object",
+      "properties": {
+        "span_id": { "type": "string" },
+        "parent_span_id": { "type": "string" },
+        "baggage": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    }
+  },
+  "additionalProperties": false
+}
