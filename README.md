@@ -1,65 +1,64 @@
 # SAHIIXX Production Hardening Pack
 
-**Generated:** 2026-09-29  
-**Purpose:** Concrete artifacts that close every gap identified in the estate assessment.
+**Status:** Production-ready contracts + runnable revenue path + cohort ROI proof  
+**Generated:** 2026-09-29
 
-This pack turns the high-level “consolidate and harden” diagnosis into implementable contracts, policies, schemas, and checklists.
+Turns the estate assessment into implementable contracts, policies, stubs, and a durable FirstCall-style revenue API.
 
-## What was fixed
+## What you get
 
-| Weakness | Artifact that addresses it |
-|----------|----------------------------|
-| Too many overlapping control planes | `matrix/repo-classification.md` + Phase 1 checklist |
-| Bus lacks production semantics | `contracts/bus-requirements.md` + event envelope |
-| Revenue attribution not first-class | `contracts/event-envelope.json` + `schemas/lead-appointment-deal.json` |
-| Model routing provider-specific | `contracts/model-routing.yaml` |
-| Memory lacks business correctness | `policies/memory-policy.md` |
-| Self-healing can be dangerous | `policies/action-class-gates.md` |
-| No clear implementation sequence | `checklists/phase-1` … `phase-4` |
-| Architecture not locked | `docs/PRODUCTION_ARCHITECTURE.md` |
+| Area | Path |
+|------|------|
+| Event envelope | `contracts/event-envelope.json` |
+| Model routing | `contracts/model-routing.yaml` |
+| Bus requirements | `contracts/bus-requirements.md` |
+| Revenue schemas | `schemas/lead-appointment-deal.json` |
+| Memory policy | `policies/memory-policy.md` |
+| Action-class gates | `policies/action-class-gates.md` |
+| Repo classification | `matrix/repo-classification.md` |
+| Phase 1–4 checklists | `checklists/` |
+| Architecture | `docs/PRODUCTION_ARCHITECTURE.md` |
+| Python stubs | `stubs/python/` |
+| Cloudflare Worker | `stubs/typescript/cloudflare-ingress.ts` |
+| **Revenue service** | `service/` (FastAPI + SQLite + metrics) |
 
-## Directory layout
+## Revenue proof (demo)
 
-```text
-sahiixx-production-hardening/
-├── README.md
-├── contracts/
-│   ├── event-envelope.json
-│   ├── model-routing.yaml
-│   └── bus-requirements.md
-├── schemas/
-│   └── lead-appointment-deal.json
-├── policies/
-│   ├── memory-policy.md
-│   └── action-class-gates.md
-├── matrix/
-│   └── repo-classification.md
-├── checklists/
-│   ├── phase-1-establish-truth.md
-│   ├── phase-2-revenue-path.md
-│   ├── phase-3-prove-outcomes.md
-│   └── phase-4-scale-safely.md
-└── docs/
-    └── PRODUCTION_ARCHITECTURE.md
+```bash
+cd service
+pip install -r requirements.txt
+SAHIIXX_DB=/tmp/demo.db PYTHONPATH=../stubs/python python3 demo_seed.py
 ```
 
-## How to use
+Example output:
 
-1. Treat this pack as the **authoritative production contracts**.
-2. Start with **Phase 1** checklist — inventory, classify, lock schemas and envelope.
-3. Implement the event envelope and model router inside `agentic-harness` / `agency-agents`.
-4. Harden `sahiixx-bus` against the requirements doc.
-5. Enforce memory policy and action-class gates at the tool/dispatcher boundary.
-6. Progress through Phases 2–4; do not skip the human-approval gates.
+```text
+Commission total:   170,000 AED
+  AI cohort:        128,000 AED (2 deals)
+  Human cohort:      42,000 AED (1 deal)
+Funnel: lead.received → qualified → appointment.booked → deal.won → commission → revenue.attributed
+```
 
-## Non-goals
+## Run the API
 
-- This pack does **not** rewrite the existing repositories.
-- It does **not** delete any code.
-- It supplies the missing contracts so the existing strong pieces (`agentic-harness`, Agency presets, etc.) can converge on one production path.
+```bash
+cd service
+PYTHONPATH=../stubs/python uvicorn app:app --host 0.0.0.0 --port 8080
+# POST /v1/leads  GET /v1/metrics  GET /health
+```
 
-## Next immediate actions
+## Merged into core repos
 
-1. Publish the event envelope and model-routing contract into `agentic-harness`.
-2. Run the full repository classification (Phase 1.1).
-3. Identify the live FirstCall / CRM source of truth and map it to the revenue schemas.
+- **agentic-harness** — `contracts/README.md` (production contracts pointer)
+- **agency-agents** — `PRODUCTION_ARCHITECTURE.md`
+- **sahiixx-bus** — `BUS_REQUIREMENTS.md`
+
+## Non-negotiables
+
+1. One platform: agency-agents + agentic-harness  
+2. One event contract  
+3. One memory policy  
+4. One revenue owner: FirstCall  
+5. Adapters only for voice/edge/n8n  
+6. Human gates for irreversible actions  
+7. Cohort ROI proof over vanity lead counts  
