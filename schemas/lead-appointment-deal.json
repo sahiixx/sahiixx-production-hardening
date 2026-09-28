@@ -1,0 +1,197 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sahiixx.internal/schemas/revenue-entities/v1",
+  "title": "SAHIIXX Revenue Entity Schemas",
+  "description": "Canonical schemas for lead, appointment, deal, payment, and commission. FirstCall owns these as source of truth.",
+  "definitions": {
+    "Lead": {
+      "type": "object",
+      "required": ["lead_id", "tenant_id", "source", "status", "created_at", "consent"],
+      "properties": {
+        "lead_id": { "type": "string", "format": "uuid" },
+        "tenant_id": { "type": "string" },
+        "external_ids": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Map of CRM / channel IDs, e.g. { \"hubspot\": \"...\", \"telegram\": \"...\" }"
+        },
+        "source": {
+          "type": "string",
+          "enum": ["telegram", "web_form", "crm", "api", "voice", "whatsapp", "email", "referral", "other"]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "received",
+            "normalized",
+            "consent_pending",
+            "consent_verified",
+            "qualified",
+            "disqualified",
+            "matched",
+            "contacted",
+            "replied",
+            "appointment_booked",
+            "closed_won",
+            "closed_lost",
+            "archived"
+          ]
+        },
+        "contact": {
+          "type": "object",
+          "properties": {
+            "full_name": { "type": "string" },
+            "phone": { "type": "string" },
+            "email": { "type": "string", "format": "email" },
+            "preferred_channel": { "type": "string" },
+            "locale": { "type": "string" },
+            "timezone": { "type": "string" }
+          }
+        },
+        "geo": {
+          "type": "object",
+          "properties": {
+            "country": { "type": "string" },
+            "city": { "type": "string" },
+            "area": { "type": "string" },
+            "lat": { "type": "number" },
+            "lng": { "type": "number" }
+          }
+        },
+        "intent": {
+          "type": "object",
+          "properties": {
+            "transaction_type": { "type": "string", "enum": ["buy", "rent", "sell", "invest", "other"] },
+            "property_type": { "type": "string" },
+            "budget_min": { "type": "number" },
+            "budget_max": { "type": "number" },
+            "currency": { "type": "string", "default": "AED" },
+            "bedrooms": { "type": "integer" },
+            "notes": { "type": "string" }
+          }
+        },
+        "qualification": {
+          "type": "object",
+          "properties": {
+            "score": { "type": "number", "minimum": 0, "maximum": 1 },
+            "band": { "type": "string", "enum": ["A", "B", "C", "D", "F"] },
+            "reasons": { "type": "array", "items": { "type": "string" } },
+            "model": { "type": "string" },
+            "scored_at": { "type": "string", "format": "date-time" },
+            "human_override": { "type": "boolean", "default": false }
+          }
+        },
+        "consent": {
+          "type": "object",
+          "required": ["marketing", "contact", "recorded_at"],
+          "properties": {
+            "marketing": { "type": "boolean" },
+            "contact": { "type": "boolean" },
+            "recorded_at": { "type": "string", "format": "date-time" },
+            "channel": { "type": "string" },
+            "evidence_ref": { "type": "string" }
+          }
+        },
+        "assignment": {
+          "type": "object",
+          "properties": {
+            "agent_id": { "type": "string" },
+            "team_id": { "type": "string" },
+            "matched_at": { "type": "string", "format": "date-time" },
+            "match_rules": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "deleted_at": { "type": ["string", "null"], "format": "date-time" }
+      },
+      "additionalProperties": false
+    },
+    "Appointment": {
+      "type": "object",
+      "required": ["appointment_id", "lead_id", "tenant_id", "status", "scheduled_at"],
+      "properties": {
+        "appointment_id": { "type": "string", "format": "uuid" },
+        "lead_id": { "type": "string", "format": "uuid" },
+        "tenant_id": { "type": "string" },
+        "status": {
+          "type": "string",
+          "enum": ["proposed", "booked", "confirmed", "showed", "no_show", "cancelled", "rescheduled"]
+        },
+        "scheduled_at": { "type": "string", "format": "date-time" },
+        "duration_minutes": { "type": "integer", "minimum": 15 },
+        "location": { "type": "string" },
+        "meeting_type": { "type": "string", "enum": ["in_person", "video", "phone"] },
+        "agent_id": { "type": "string" },
+        "property_refs": { "type": "array", "items": { "type": "string" } },
+        "notes": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Deal": {
+      "type": "object",
+      "required": ["deal_id", "lead_id", "tenant_id", "status", "value", "currency"],
+      "properties": {
+        "deal_id": { "type": "string", "format": "uuid" },
+        "lead_id": { "type": "string", "format": "uuid" },
+        "appointment_id": { "type": ["string", "null"], "format": "uuid" },
+        "tenant_id": { "type": "string" },
+        "status": {
+          "type": "string",
+          "enum": ["created", "negotiation", "won", "lost", "cancelled"]
+        },
+        "value": { "type": "number", "minimum": 0 },
+        "currency": { "type": "string", "default": "AED" },
+        "property_ref": { "type": "string" },
+        "closed_at": { "type": ["string", "null"], "format": "date-time" },
+        "agent_id": { "type": "string" },
+        "attribution": {
+          "type": "object",
+          "properties": {
+            "ai_assisted": { "type": "boolean" },
+            "primary_agent_run_ids": { "type": "array", "items": { "type": "string" } },
+            "human_override_rate": { "type": "number" }
+          }
+        },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Commission": {
+      "type": "object",
+      "required": ["commission_id", "deal_id", "tenant_id", "amount", "currency", "status"],
+      "properties": {
+        "commission_id": { "type": "string", "format": "uuid" },
+        "deal_id": { "type": "string", "format": "uuid" },
+        "tenant_id": { "type": "string" },
+        "amount": { "type": "number", "minimum": 0 },
+        "currency": { "type": "string", "default": "AED" },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "approved", "paid", "clawed_back"]
+        },
+        "beneficiary_agent_id": { "type": "string" },
+        "recorded_at": { "type": "string", "format": "date-time" },
+        "paid_at": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
+    "Payment": {
+      "type": "object",
+      "required": ["payment_id", "deal_id", "tenant_id", "amount", "currency", "status"],
+      "properties": {
+        "payment_id": { "type": "string", "format": "uuid" },
+        "deal_id": { "type": "string", "format": "uuid" },
+        "tenant_id": { "type": "string" },
+        "amount": { "type": "number", "minimum": 0 },
+        "currency": { "type": "string" },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "captured", "failed", "refunded"]
+        },
+        "provider_ref": { "type": "string" },
+        "recorded_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}
