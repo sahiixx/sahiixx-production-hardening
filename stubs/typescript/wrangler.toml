@@ -1,0 +1,8 @@
+name = "sahiixx-edge-ingress"
+main = "cloudflare-ingress.ts"
+compatibility_date = "2024-09-23"
+
+# npx wrangler secret put BUS_TOKEN
+# Set FIRSTCALL_URL in dashboard or:
+# [vars]
+# FIRSTCALL_URL = "https://your-api.example.com/v1/leads"
