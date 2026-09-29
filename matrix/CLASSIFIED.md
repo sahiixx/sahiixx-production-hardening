@@ -21,22 +21,39 @@ Updated: 2026-09-29
 |------|------|
 | moltworker | Cloudflare edge gateway |
 | ocr-playbook-scanner | Document ingestion |
+| friday-tony-stark | Voice channel |
+| sahiix-proxy | Edge proxy |
+| agentic-harness-integration | Harness consumer layer |
+| integrations | External connectors |
 
 ## reference
 
 | Repo | Role |
 |------|------|
-| sovereign-swarm-v2 | Consolidate into agency-agents |
+| sovereign-revenue-os | E2E RE OS experiment → use FirstCall |
+| sovereign-agents | Pipeline microservices experiment |
+| sovereign-prompt-pack | Prompt pack → agency-agents |
+| nexus-buyer-recovery | Scoring experiment |
+| codex-self | Identity/memory experiment |
+| lazy-ai-ops | Revenue-button experiment |
+
+## sandbox
+
+| Repo | Role |
+|------|------|
+| moltbot-sandbox | OpenClaw CF sandbox |
+| orchestrator | Private working |
+| workflows | Private working |
 
 ## archive-candidate
 
 | Repo | Notes |
 |------|-------|
-| nextjs-boilerplate | Already archived |
+| nextjs-boilerplate | Already archived on GitHub |
+| myproject | Already archived |
+| mbjv | Already archived |
 
-## Still to label
+## Production rule
 
-Remaining public/private repos under `sahiixx` should get a STATUS.md using the matrix legend:
-`canonical | adapter | reference | sandbox | archive-candidate`.
-
-Priority next: friday-os, hermes-agent, openclaw, sovereign-revenue-os, sahiixx-titans-memory, sahiixx-graph-sight.
+Only **canonical** repos may own production control planes or revenue state.
+Adapters emit events; references/sandboxes feed patterns upward — never the reverse.
