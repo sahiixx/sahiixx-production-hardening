@@ -16,7 +16,7 @@ Complements `docs/DEPLOY.md` (generic runbook). This is the exact **Fly.io** seq
 | Health check | `GET /health` → `{"status":"ok","service":"firstcall-revenue"}`; also `/docs`, `/v1/metrics` |
 | Env vars | `SAHIIXX_DB` (DB path), `PORT`. **No secrets required to boot.** |
 | Persistence | SQLite at `$SAHIIXX_DB` → Fly volume mounted at `/data` (`sahiixx_data`, 1 GB) |
-| Auth | **None** — service ignores `Authorization` headers (see FIRSTCALL_TOKEN note below) |
+| Auth | **None** — service ignores `Authorization` headers (see §6a for the client-side token) |
 
 ## Tool availability (checked 2026-10-01, this box)
 
@@ -83,38 +83,83 @@ curl.exe -s https://sahiixx-firstcall.fly.dev/docs -o NUL -w "%{http_code}"     
 curl.exe -s "https://sahiixx-firstcall.fly.dev/v1/metrics?tenant_id=tenant-dubai-re"
 ```
 
-## 6. Wire sahiixx-os (Cloudflare Pages)
+## 6. Wire the OS — READ FIRST: `FIRSTCALL_URL` is NOT a sahiixx-os variable
 
-In the **sahiixx-os** Pages project → Settings → Environments → Production, set:
+**Verified 2026-10-01 against the live deploy and the source at `F:\repos\sahiixx-os`
+(HEAD `a071c5f`, v4.3.0). Do not set `FIRSTCALL_URL` on the Pages project — nothing
+reads it and it will silently do nothing.**
+
+Evidence (source-wide grep of `api/ src/ scripts/ db/ mcp/`, excluding `node_modules`):
+`0` hits for `FIRSTCALL`. The bundled `dist/boot.js` has `FIRSTCALL -> 0`,
+`v1/leads -> 0`, `REVENUE_API -> 7`.
+
+`sahiixx-os` has exactly **one** outbound revenue bridge, and it targets a
+**different app**:
+
+| Fact | Value |
+|---|---|
+| Env vars | `REVENUE_API_URL` + `REVENUE_API_KEY` (`api/lib/env.ts:142`, injected at `api/boot.ts:157`) |
+| Client | `api/sovereign.ts` → `POST ${REVENUE_API_URL}/pipeline/process` |
+| Auth header | `X-API-Key: <REVENUE_API_KEY>` |
+| Gated on | **both** vars set, else every call returns `null` and the push is skipped |
+| UI probe | `sahiixx.sovereignStatus` (public tRPC) |
+| Call sites | `api/sahiixx-router.ts:305,319` (signal create) and `:481` (`ingestLead` mutation) |
+
+### 6a. To point the OS at THIS service (`sahiixx-firstcall`)
+
+`sovereign.ts` is hardcoded to `/pipeline/process`, which this service does not
+have — its routes are `/health /v1/leads /v1/appointments /v1/deals /v1/commissions
+/v1/metrics`. Setting `REVENUE_API_URL=https://sahiixx-firstcall.fly.dev` would
+therefore make every signal-create push **404** (verified: `POST /pipeline/process
+-> 404`). It needs a code change:
+
+1. Add a `firstcall` client (mirror `api/sovereign.ts`): `POST ${FIRSTCALL_URL}/v1/leads`
+   with `Idempotency-Key` + `X-Tenant-Id` headers and the `sovereign.ts` payload
+   shape (`full_name`/`name`/`email`/`phone`/`budget_min`/`budget_max`/`source`).
+2. Read it from `api/lib/env.ts` (+ a `setFirstcallUrl` setter) and inject it in
+   `api/boot.ts` next to the `setRevenueApiUrl` pair.
+3. Call it from the same two sites, wrapped in the existing `try/catch` so a
+   downstream failure never breaks the local write.
+4. Then set the Pages production env vars and redeploy.
+
+### 6b. To wire the EXISTING bridge (different service, already deployed)
 
 ```text
-FIRSTCALL_URL   = https://sahiixx-firstcall.fly.dev/v1/leads
-FIRSTCALL_TOKEN =
+REVENUE_API_URL = https://sovereign-revenue-os.fly.dev
+REVENUE_API_KEY = <its X-API-Key>
 ```
 
-- `FIRSTCALL_URL` must be the **full lead endpoint** (`…/v1/leads`) per this repo's Worker
-  convention (`stubs/typescript/cloudflare-ingress.ts` treats `FIRSTCALL_URL` as the complete
-  target). If the sahiixx-os frontend appends `/v1/leads` itself, set only
-  `https://sahiixx-firstcall.fly.dev` — check its source first.
-- `FIRSTCALL_TOKEN`: **the service has no auth layer** (verified — no token/bearer check in
-  `service/`). Leave empty, or set a non-empty placeholder if the frontend requires a value to
-  fire requests; it is not validated server-side. Adding bearer enforcement to `app.py` is
-  follow-up hardening before real traffic.
-- Save → redeploy Pages (Deployments → Retry deployment) so the var takes effect.
+Caveat verified 2026-10-01: `sovereign-revenue-os` is **live but its pipeline is
+broken** — `GET /health` returns `{"status":"healthy","services":["redis"]}` while
+both `POST /pipeline/process` and `GET /pipeline/health` return **HTTP 500**. So
+wiring 6b produces `configured: true, error: "…500…"`. Fix that app first.
 
-## 7. Confirm the OS bridge is active
+### 6c. Cloudflare access note
+
+This box has **no Cloudflare credentials** — no `wrangler` on PATH, no
+`CLOUDFLARE_API_TOKEN`, and `%APPDATA%\xdg.config\.wrangler` holds only
+`metrics.json` + logs (no `config/default.toml` → no OAuth token). Env vars must
+be set in the **dashboard**, or a token must be created and provided. Deploys are
+**not** automated: `.github/workflows/ci.yml` only *smokes* the live Pages URL on
+push to `main`; it never runs `wrangler pages deploy`. A redeploy is a manual
+dashboard action (or a local `wrangler` run).
+
+## 7. Confirm this service is healthy (and, if 6a was done, that the OS bridge is live)
 
 ```powershell
-# a) endpoint reachable with the headers the edge sends:
+# a) service reachable with the headers the edge sends:
 curl.exe -s -X POST https://sahiixx-firstcall.fly.dev/v1/leads -H "Content-Type: application/json" -H "Idempotency-Key: bridge-check-1" -H "X-Tenant-Id: default-tenant" -d "{\"full_name\":\"Bridge Check\",\"source\":\"web_form\"}"
 #    -> HTTP 200, "duplicate": false first call, true on repeat (idempotency proven)
 
-# b) end-to-end: trigger a lead capture in the sahiixx-os UI, then:
+# b) end-to-end, ONLY after the 6a code change is deployed:
+#    trigger a lead capture in the sahiixx-os UI, then:
 curl.exe -s "https://sahiixx-firstcall.fly.dev/v1/metrics?tenant_id=default-tenant"
 #    -> funnel_event_counts shows lead.received / lead.qualified from the Pages path
-```
 
-When (a) and (b) return data, `FIRSTCALL_URL` is live and the OS bridge is active.
+# c) does the OS consider its bridge configured? (public tRPC, no auth)
+curl.exe -s https://sahiixx-os.pages.dev/api/trpc/sahiixx.sovereignStatus
+#    -> {"available":false,...} means no bridge env vars are set (expected today)
+```
 
 ## Rollback / ops
 
