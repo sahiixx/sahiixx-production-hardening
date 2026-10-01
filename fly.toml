@@ -1,0 +1,40 @@
+# Fly.io config — FirstCall Revenue API (service/)
+# Reuses the repo's existing container convention: service/Dockerfile.compose
+# (build context = repo root). Local Docker daemon NOT required — Fly builds remotely.
+#
+# Fly app names are globally unique. If `fly apps create` rejects the name,
+# change `app` below (e.g. sahiixx-firstcall-<yourorg>) before deploying.
+
+app = "sahiixx-firstcall"
+primary_region = "fra"   # Frankfurt (nearest Fly region to the UAE audience); change if you prefer
+
+[build]
+  dockerfile = "service/Dockerfile.compose"
+
+[env]
+  PORT = "8080"                               # service listens on ${PORT:-8080}
+  SAHIIXX_DB = "/data/sahiixx_revenue.db"     # SQLite on the volume mounted below
+
+[http_service]
+  internal_port = 8080                        # must match PORT
+  force_https = true
+  auto_start_machines = true
+  auto_stop_machines = "stop"
+  min_machines_running = 1                    # set 0 to cut cost (cold start on wake)
+
+  [[http_service.checks]]
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "15s"
+    method = "GET"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
+
+# SQLite persistence. Create before first deploy (1 GB min; use 3 if rejected):
+#   fly volumes create sahiixx_data --app sahiixx-firstcall --region fra --size 1
+[[mounts]]
+  source = "sahiixx_data"
+  destination = "/data"

@@ -1,0 +1,8 @@
+# Build-context hygiene for service/Dockerfile.compose (context = repo root)
+.git
+.env
+**/__pycache__
+*.pyc
+*.db
+*.db-*
+*.log
