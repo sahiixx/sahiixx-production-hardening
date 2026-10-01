@@ -29,14 +29,13 @@ Complements `docs/DEPLOY.md` (generic runbook). This is the exact **Fly.io** seq
 | gh | ✅ | 2.101.0, authenticated as sahiixx |
 | git | ✅ | clone of `sahiixx/sahiixx-production-hardening` |
 
-## 0. Commit the deploy artifacts (repo currently has them uncommitted)
+## 0. Deploy artifacts — already committed ✅
 
-```powershell
-cd C:\Users\sahii\sahiixx-production-hardening
-git add fly.toml .dockerignore DEPLOY.md service/Dockerfile.compose
-git commit -m "Add Fly.io deploy artifacts (fly.toml, DEPLOY.md, configurable PORT)"
-# push when ready: git push origin main   (deploy itself works from the local clone, no push required)
-```
+`fly.toml`, `.dockerignore`, `DEPLOY.md` and the `PORT` change in
+`service/Dockerfile.compose` are committed and pushed (`95396e6`, deploy
+artifacts; `ed9008b`, this doc's §6 correction). Steps 1–5 below are the
+*record* of what was run on 2026-10-01 — the app is **live**, so you only need
+them again to redeploy or recreate.
 
 ## 1. Install + authenticate flyctl (once)
 
