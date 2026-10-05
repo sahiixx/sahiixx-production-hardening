@@ -114,7 +114,7 @@ def create_lead(
     lead = normalize_lead(raw, tenant_id=tenant_id)
     key = idempotency_key or f"lead:{tenant_id}:{lead['lead_id']}"
 
-    cached = db.get_idempotent(key)
+    cached = db.get_idempotent(key, tenant_id)
     if cached:
         return {**cached, "duplicate": True}
 
