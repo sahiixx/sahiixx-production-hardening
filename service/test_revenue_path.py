@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "stubs" / "python"))
 
 import db  # noqa: E402
+import app as service_app  # noqa: E402
 from app import (  # noqa: E402
     create_lead,
     book_appointment,
@@ -32,6 +33,9 @@ class RevenuePathTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory(prefix="revenue-path-")
         self.addCleanup(temporary.cleanup)
         self.enterContext(patch.object(db, "_DB_PATH", Path(temporary.name) / "revenue.db"))
+        self.enterContext(
+            patch.object(service_app, "resolve_for_event", return_value={"model": "stub/deterministic"})
+        )
         db.init_db()
 
     def test_idempotent_lead(self):
