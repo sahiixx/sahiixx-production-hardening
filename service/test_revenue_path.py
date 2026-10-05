@@ -1,21 +1,18 @@
 """
 Integration tests for the revenue path.
-Run: cd service && SAHIIXX_DB=/tmp/t.db PYTHONPATH=../stubs/python python3 test_revenue_path.py
+Run from the repository root: python3 -m unittest discover -s service -p 'test_*.py' -v
 """
 
 from __future__ import annotations
 
-import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "stubs" / "python"))
-
-_db_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-os.environ["SAHIIXX_DB"] = _db_file.name
 
 import db  # noqa: E402
 from app import (  # noqa: E402
@@ -31,8 +28,10 @@ from app import (  # noqa: E402
 
 
 class RevenuePathTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix="revenue-path-")
+        self.addCleanup(temporary.cleanup)
+        self.enterContext(patch.object(db, "_DB_PATH", Path(temporary.name) / "revenue.db"))
         db.init_db()
 
     def test_idempotent_lead(self):
@@ -118,7 +117,7 @@ class RevenuePathTests(unittest.TestCase):
             )
         )
         m = db.fetch_metrics("t-funnel")
-        self.assertGreaterEqual(m["commission_total"], 50_000)
+        self.assertEqual(m["commission_total"], 50_000)
         self.assertIn("lead.received", m["funnel_event_counts"])
         self.assertIn("revenue.attributed", m["funnel_event_counts"])
         self.assertIn("ai_assisted", m["deals_by_cohort"])

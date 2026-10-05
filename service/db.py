@@ -16,6 +16,30 @@ from typing import Any, Iterator, Optional
 _DB_PATH = Path(os.environ.get("SAHIIXX_DB", "sahiixx_revenue.db"))
 _LOCK = threading.Lock()
 
+_IDEMPOTENCY_SCHEMA = """
+CREATE TABLE IF NOT EXISTS idempotency (
+    key TEXT NOT NULL,
+    tenant_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    response_json TEXT NOT NULL,
+    PRIMARY KEY (tenant_id, key)
+)
+"""
+
+_LEADS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS leads (
+    lead_id TEXT NOT NULL,
+    tenant_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    source TEXT,
+    data_json TEXT NOT NULL,
+    cohort TEXT NOT NULL DEFAULT 'ai_assisted',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (tenant_id, lead_id)
+)
+"""
+
 
 def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(str(_DB_PATH), check_same_thread=False)
@@ -25,31 +49,37 @@ def _connect() -> sqlite3.Connection:
     return conn
 
 
+def _migrate_tenant_key(conn: sqlite3.Connection, table: str, key: str, schema: str) -> None:
+    """Copy global-key tables into tenant-key tables, retaining the original data."""
+    columns = conn.execute(f'PRAGMA table_info("{table}")').fetchall()
+    primary_key = [
+        column["name"]
+        for column in sorted(columns, key=lambda column: column["pk"])
+        if column["pk"]
+    ]
+    if primary_key == ["tenant_id", key]:
+        return
+    if primary_key != [key]:
+        raise RuntimeError(f"Unexpected primary key for {table}: {primary_key}")
+
+    # No DROP: the legacy table remains a snapshot for inspection/recovery.
+    conn.execute(f'ALTER TABLE "{table}" RENAME TO "{table}_legacy_v1"')
+    conn.execute(schema)
+    names = ", ".join('"' + column["name"].replace('"', '""') + '"' for column in columns)
+    conn.execute(
+        f'INSERT INTO "{table}" ({names}) SELECT {names} FROM "{table}_legacy_v1"'
+    )
+
+
 def init_db() -> None:
     with _LOCK:
         conn = _connect()
         try:
             conn.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS idempotency (
-                    key TEXT PRIMARY KEY,
-                    tenant_id TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    response_json TEXT NOT NULL
-                );
-
-                CREATE TABLE IF NOT EXISTS leads (
-                    lead_id TEXT PRIMARY KEY,
-                    tenant_id TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    source TEXT,
-                    data_json TEXT NOT NULL,
-                    cohort TEXT NOT NULL DEFAULT 'ai_assisted',
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                );
-                CREATE INDEX IF NOT EXISTS idx_leads_tenant ON leads(tenant_id);
-                CREATE INDEX IF NOT EXISTS idx_leads_cohort ON leads(cohort);
+                f"""
+                BEGIN IMMEDIATE;
+                {_IDEMPOTENCY_SCHEMA};
+                {_LEADS_SCHEMA};
 
                 CREATE TABLE IF NOT EXISTS events (
                     event_id TEXT PRIMARY KEY,
@@ -112,7 +142,14 @@ def init_db() -> None:
                 );
                 """
             )
+            _migrate_tenant_key(conn, "idempotency", "key", _IDEMPOTENCY_SCHEMA)
+            _migrate_tenant_key(conn, "leads", "lead_id", _LEADS_SCHEMA)
+            # Legacy indexes retain their names on the archived table.
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_leads_cohort_scoped ON leads(cohort)")
             conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
         finally:
             conn.close()
 
@@ -131,10 +168,11 @@ def session() -> Iterator[sqlite3.Connection]:
             conn.close()
 
 
-def get_idempotent(key: str) -> Optional[dict[str, Any]]:
+def get_idempotent(key: str, tenant_id: str) -> Optional[dict[str, Any]]:
     with session() as conn:
         row = conn.execute(
-            "SELECT response_json FROM idempotency WHERE key = ?", (key,)
+            "SELECT response_json FROM idempotency WHERE tenant_id = ? AND key = ?",
+            (tenant_id, key),
         ).fetchone()
         if row:
             return json.loads(row["response_json"])
@@ -155,7 +193,7 @@ def upsert_lead(lead: dict[str, Any], cohort: str = "ai_assisted") -> None:
             """
             INSERT INTO leads (lead_id, tenant_id, status, source, data_json, cohort, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(lead_id) DO UPDATE SET
+            ON CONFLICT(tenant_id, lead_id) DO UPDATE SET
               status=excluded.status,
               data_json=excluded.data_json,
               updated_at=excluded.updated_at
